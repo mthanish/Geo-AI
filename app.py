@@ -1,48 +1,63 @@
 import streamlit as st
 import pandas as pd
 import folium
+from folium.plugins import HeatMap
 from streamlit_folium import st_folium
 
 st.set_page_config(layout="wide")
+st.title("🗺️ GeoAI Mapper – Mineral Prospectivity Explorer")
 
-st.title("🗺️ GeoAI Mapper – Mineral Prospectivity Viewer")
-
-# Step 1: Load prediction results from file (no upload)
+# Step 1: Load prediction results
 @st.cache_data
-def load_data():
-    df = pd.read_csv("prediction_results.csv")
-    return df
+def load_predictions():
+    return pd.read_csv("prediction_results.csv")
 
-df = load_data()
+df = load_predictions()
 
-# Step 2: Check required columns
-required_cols = {"lat", "lon", "mineral_potential"}
-if not required_cols.issubset(df.columns):
-    st.error("Missing required columns in prediction_results.csv.")
-    st.stop()
+# Step 2: Sidebar controls
+st.sidebar.title("⚙️ Map Settings")
 
-# Step 3: Threshold slider
-threshold = st.slider("Select probability threshold", 0.0, 1.0, 0.5, 0.01)
+# Threshold slider
+threshold = st.sidebar.slider("Minimum mineral potential", 0.0, 1.0, 0.5, 0.01)
 filtered_df = df[df["mineral_potential"] >= threshold]
-st.markdown(f"**Filtered Locations Above Threshold:** {len(filtered_df)}")
+st.sidebar.markdown(f"**Filtered Points:** {len(filtered_df)}")
 
-# Step 4: Show data table
-st.dataframe(filtered_df[["lat", "lon", "lithologic", "fault_dist", "fold_dist", "mineral_potential"]]
-             .sort_values("mineral_potential", ascending=False))
+# View toggle: Heatmap or Circle Markers
+view_mode = st.sidebar.radio("Map View Mode", ["Heatmap", "Circle Markers"])
 
-# Step 5: Create map
-m = folium.Map(location=[df["lat"].mean(), df["lon"].mean()], zoom_start=6)
+# Step 3: Create the base map
+map_center = [df["lat"].mean(), df["lon"].mean()]
+m = folium.Map(location=map_center, zoom_start=6)
 
-# Add mineral potential points
-for _, row in filtered_df.iterrows():
-    folium.CircleMarker(
-        location=[row["lat"], row["lon"]],
-        radius=4,
-        fill=True,
-        color="red",
-        fill_opacity=row["mineral_potential"],
-        popup=f"Potential: {row['mineral_potential']:.2f}"
-    ).add_to(m)
+# Step 4: Add heatmap or markers
+if view_mode == "Heatmap":
+    heat_data = [
+        [row["lat"], row["lon"], row["mineral_potential"]]
+        for index, row in filtered_df.iterrows()
+    ]
+    if heat_data:
+        HeatMap(heat_data, radius=8, blur=15, max_zoom=1).add_to(m)
+    else:
+        st.warning("No data points meet the selected threshold.")
+else:
+    for _, row in filtered_df.iterrows():
+        folium.CircleMarker(
+            location=[row["lat"], row["lon"]],
+            radius=4,
+            fill=True,
+            color="red",
+            fill_opacity=row["mineral_potential"],
+            popup=f"Potential: {row['mineral_potential']:.2f}"
+        ).add_to(m)
 
-# Step 6: Display map
-st_folium(m, width=900, height=600)
+# Step 5: Display the map
+st.subheader("🗺️ Mineral Potential Map")
+st_folium(m, width=1000, height=600)
+
+# Step 6: Expandable data table
+with st.expander("📋 Show Filtered Data Table"):
+    st.dataframe(
+        filtered_df[["lat", "lon", "lithologic", "fault_dist", "fold_dist", "mineral_potential"]]
+        .sort_values("mineral_potential", ascending=False),
+        height=300
+    )
