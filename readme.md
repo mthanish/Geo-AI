@@ -21,6 +21,8 @@ To run the project locally, install the dependencies using:
 ```bash
 pip install -r requirements.txt
 
+---
+
 run using :
 
 ```bash
